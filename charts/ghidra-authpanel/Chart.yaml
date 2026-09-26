@@ -1,0 +1,19 @@
+apiVersion: v2
+name: ghidra-authpanel
+description: Self-service account and repository access panel for Ghidra servers, with Discord or OIDC login
+home: https://github.com/tankbusta/ghidra-panel
+sources:
+  - https://github.com/tankbusta/ghidra-panel
+keywords:
+  - ghidra
+  - oidc
+
+type: application
+
+# This is the chart version. This version number should be incremented each time you make changes
+# to the chart and its templates, including the app version.
+# Versions are expected to follow Semantic Versioning (https://semver.org/)
+version: 0.2.0
+
+# Image tag deployed by default. The image is published from main as "latest" and "sha-<commit>".
+appVersion: "latest"

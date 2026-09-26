@@ -1,0 +1,22 @@
+{{- /*
+Helm parses YAML numbers as float64, which mangles Discord snowflakes, so super_admins
+are given as strings and spliced back into the JSON as integers.
+*/}}
+{{- $cfg := deepCopy .Values.config }}
+{{- $admins := list }}
+{{- range .Values.config.super_admins }}
+{{- if not (and (kindIs "string" .) (regexMatch "^[0-9]+$" .)) }}
+{{- fail (printf "config.super_admins: Discord user IDs must be quoted strings, got %v" .) }}
+{{- end }}
+{{- $admins = append $admins . }}
+{{- end }}
+{{- $_ := set $cfg "super_admins" "__SUPER_ADMINS__" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ghidra-authpanel.fullname" . }}
+  labels:
+    {{- include "ghidra-authpanel.labels" . | nindent 4 }}
+data:
+  ghidra_panel.json: |
+    {{- $cfg | toPrettyJson | replace "\"__SUPER_ADMINS__\"" (printf "[%s]" (join ", " $admins)) | nindent 4 }}

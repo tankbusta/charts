@@ -1,0 +1,8 @@
+config:
+  oidc:
+    issuer: https://auth.example.com/application/o/ghidra/
+    client_id: "$env:OIDC_CLIENT_ID"
+    client_secret: "$env:OIDC_CLIENT_SECRET"
+secretEnv:
+  OIDC_CLIENT_ID: ci
+  OIDC_CLIENT_SECRET: ci

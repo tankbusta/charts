@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "ghidra-authpanel.fullname" . }}-test-connection"
+  labels:
+    {{- include "ghidra-authpanel.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['-q', '-O', '/dev/null', '{{ include "ghidra-authpanel.fullname" . }}:{{ .Values.service.port }}/assets/custom.css']
+  restartPolicy: Never

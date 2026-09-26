@@ -1,0 +1,8 @@
+config:
+  discord:
+    client_id: "$env:DISCORD_CLIENT_ID"
+    client_secret: "$env:DISCORD_CLIENT_SECRET"
+  super_admins: ["123456789012345678"]
+secretEnv:
+  DISCORD_CLIENT_ID: ci
+  DISCORD_CLIENT_SECRET: ci

@@ -1,0 +1,228 @@
+# Default values for ghidra-authpanel.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# More than one replica requires PostgreSQL (config.database), since SQLite lives on a single volume.
+replicaCount: 1
+
+# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+image:
+  repository: ghcr.io/tankbusta/ghidra-panel
+  # This sets the pull policy for images.
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  # Pin a sha-<commit> tag for reproducible deploys.
+  tag: ""
+
+# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: []
+# This is to override the chart name.
+nameOverride: ""
+fullnameOverride: ""
+
+# Panel configuration, rendered as-is to ghidra_panel.json.
+# See https://github.com/tankbusta/ghidra-panel#readme for all keys.
+#
+# Credentials should not be placed here. Instead reference an environment variable with
+# "$env:NAME" and provide it through secretEnv, env or envFrom below. This is supported for
+# database, discord.bot_token, discord.client_id, discord.client_secret, discord.webhook_url,
+# oidc.issuer, oidc.client_id and oidc.client_secret. The panel refuses to start if a
+# referenced variable is unset.
+config:
+  # Public URL of the panel. OAuth2 redirect URIs are derived from it:
+  #   Discord: <base_url>/redirect
+  #   OIDC:    <base_url>/oidc/redirect
+  base_url: "http://chart-example.local"
+
+  # SQLite file path (relative to the /data volume) or a postgres:// URL.
+  # For PostgreSQL use "$env:DATABASE_URL" and set DATABASE_URL via secretEnv/envFrom.
+  database: ghidra_panel.db
+
+  ghidra:
+    # Ghidra server address shown to users.
+    endpoint:
+      hostname: ghidra.example.com
+      port: 13100
+    # gRPC API of the Ghidra server's panel plugin.
+    grpc_addr: "ghidra-server:13103"
+
+  # Footer links.
+  links: []
+  # - name: Source Code
+  #   url: https://github.com/tankbusta/ghidra-panel
+
+  # At least one login provider (discord.client_id or oidc.issuer) must be configured.
+  # Discord login is enabled by client_id/client_secret. webhook_url alone only
+  # delivers access request notifications.
+  discord: {}
+  #   client_id: "$env:DISCORD_CLIENT_ID"
+  #   client_secret: "$env:DISCORD_CLIENT_SECRET"
+  #   bot_token: "$env:DISCORD_BOT_TOKEN"
+  #   webhook_url: "$env:DISCORD_WEBHOOK_URL"
+
+  # Discord user IDs of super admins. Must be quoted, e.g. ["123456789012345678"].
+  super_admins: []
+
+  # OpenID Connect login is enabled by setting issuer.
+  oidc: {}
+  #   issuer: https://auth.example.com/application/o/ghidra/
+  #   client_id: "$env:OIDC_CLIENT_ID"
+  #   client_secret: "$env:OIDC_CLIENT_SECRET"
+  #   display_name: Example SSO
+  #   scopes: ["openid", "profile", "email"]
+  #   username_claim: preferred_username
+  #   # OIDC subjects of super admins
+  #   super_admins: []
+
+# Environment variables stored in a Secret created by this chart.
+# Convenient for small installs; prefer envFrom with an externally managed Secret otherwise.
+secretEnv: {}
+  # OIDC_CLIENT_ID: ghidra
+  # OIDC_CLIENT_SECRET: changeme
+  # DATABASE_URL: postgres://ghidra_panel:changeme@postgres/ghidra_panel?sslmode=require
+
+# Additional environment variables on the panel container.
+env: []
+# - name: PGPASSWORD
+#   valueFrom:
+#     secretKeyRef:
+#       name: ghidra-panel-db
+#       key: password
+
+# Additional environment variable sources on the panel container.
+envFrom: []
+# - secretRef:
+#     name: ghidra-panel-oidc
+
+# HMAC key used to sign session tokens. All replicas must share it.
+# When no existingSecret is given, one is generated, reused on upgrades,
+# and kept on uninstall so sessions survive a reinstall.
+hmacSecret:
+  # Use an existing Secret instead. It must contain the key "ghidra_panel.secrets.json"
+  # with content {"hmac_secret": "<base64 of 32 random bytes>"}.
+  existingSecret: ""
+
+# Volume mounted at /data, the panel's working directory. Holds the SQLite database.
+# Not needed when using PostgreSQL. The Ghidra server's JAAS plugin reads the same
+# database, so with SQLite point existingClaim at a volume the Ghidra server also mounts.
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  annotations: {}
+
+# Deployment update strategy. Defaults to Recreate while persistence is enabled,
+# since a ReadWriteOnce volume can't be attached to two pods at once.
+strategy: {}
+
+# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: false
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# This is for setting Kubernetes Annotations to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+podAnnotations: {}
+# This is for setting Kubernetes Labels to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+podLabels: {}
+
+# The image runs as 65532:65532.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
+service:
+  # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+  type: ClusterIP
+  # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+  port: 80
+
+# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 10m
+  #   memory: 32Mi
+
+# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+# Static assets are served without authentication, unlike / which redirects to the login provider.
+livenessProbe:
+  httpGet:
+    path: /assets/custom.css
+    port: http
+readinessProbe:
+  httpGet:
+    path: /assets/custom.css
+    port: http
+
+# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
+# Requires PostgreSQL and persistence.enabled=false.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+# - name: foo
+#   secret:
+#     secretName: mysecret
+#     optional: false
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: []
+# - name: foo
+#   mountPath: "/etc/foo"
+#   readOnly: true
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
