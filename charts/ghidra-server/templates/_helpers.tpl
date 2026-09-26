@@ -129,7 +129,7 @@ Fail early on configurations the server would refuse to start with
 {{- fail "tls.enabled without tls.certManager.enabled requires tls.secretName" }}
 {{- end }}
 {{- if and (eq .Values.tls.format "pkcs12") (not .Values.tls.passwordSecret.name) }}
-{{- fail "tls.format pkcs12 without tls.certManager.enabled requires tls.passwordSecret.name" }}
+{{- fail "tls.format pkcs12 requires tls.passwordSecret.name" }}
 {{- end }}
 {{- end }}
 {{- end }}
@@ -146,19 +146,12 @@ Name of the Secret holding the TLS keystore
 Keystore file name under /ghidra/server/tls
 */}}
 {{- define "ghidra-server.keystoreFile" -}}
-{{- if eq .Values.tls.format "pem" }}keystore.p12{{ else }}{{ .Values.tls.keystoreKey }}{{ end }}
+{{- if include "ghidra-server.convertCertificate" . }}keystore.p12{{ else }}{{ .Values.tls.keystoreKey }}{{ end }}
 {{- end }}
 
 {{/*
-Whether the chart generates the keystore password
+Whether an init container builds the keystore from a PEM certificate (tls.format=pem, or cert-manager)
 */}}
-{{- define "ghidra-server.generateKeystorePassword" -}}
-{{- if and .Values.tls.enabled (not .Values.tls.passwordSecret.name) (or .Values.tls.certManager.enabled (eq .Values.tls.format "pem")) }}true{{ end }}
-{{- end }}
-
-{{/*
-Name of the Secret holding the TLS keystore password
-*/}}
-{{- define "ghidra-server.tlsPasswordSecretName" -}}
-{{- .Values.tls.passwordSecret.name | default (printf "%s-keystore-password" (include "ghidra-server.fullname" .)) }}
+{{- define "ghidra-server.convertCertificate" -}}
+{{- if and .Values.tls.enabled (or .Values.tls.certManager.enabled (eq .Values.tls.format "pem")) }}true{{ end }}
 {{- end }}

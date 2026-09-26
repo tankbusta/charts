@@ -40,8 +40,10 @@ data:
     wrapper.java.additional.5=-Ddb.buffers.DataBuffer.compressedOutput=true
     {{- if .Values.tls.enabled }}
     wrapper.java.additional.6=-Dghidra.keystore=/ghidra/server/tls/{{ include "ghidra-server.keystoreFile" . }}
-    # Expanded by the service wrapper from the container environment.
+    {{- if not (include "ghidra-server.convertCertificate" .) }}
+    # Expanded by the service wrapper from the container environment. The wrapper logs it.
     wrapper.java.additional.7=-Dghidra.password=${GHIDRA_KEYSTORE_PASSWORD}
+    {{- end }}
     {{- end }}
     {{- range $i, $opt := .Values.server.extraJavaOptions }}
     wrapper.java.additional.{{ add $i 20 }}={{ $opt }}

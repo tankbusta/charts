@@ -57,18 +57,22 @@ server:
 # when they set -Dghidra.cacerts=<CA certificate PEM> (VMARGS in the client's support/launch.properties).
 tls:
   enabled: false
-  # Secret holding the keystore. Required unless certManager.enabled, which defaults it to <fullname>-tls.
+  # Secret holding the certificate. Required unless certManager.enabled, which defaults it
+  # to <fullname>-tls. Must be in the release namespace.
   secretName: ""
-  # Format of the Secret:
-  #   pkcs12: a PKCS12 or JKS keystore under keystoreKey. The first entry must be the server
-  #           certificate and its private key, with the digital signature key usage.
+  # Format of the Secret (certManager.enabled always uses pem):
   #   pem:    a kubernetes.io/tls Secret with tls.crt and tls.key, such as one cert-manager
-  #           issued for an Ingress. Converted to PKCS12 by an init container at startup.
-  #           The Secret must be in the release namespace.
-  format: pkcs12
+  #           issued for an Ingress. An init container converts it to a password-less PKCS12
+  #           keystore holding only the server certificate (the first one in tls.crt).
+  #   pkcs12: a PKCS12 or JKS keystore under keystoreKey, with its password in passwordSecret.
+  #           Its only entry must be the server certificate and key, without CA certificates:
+  #           Ghidra requires the digital signature key usage on the last certificate of the
+  #           chain. The service wrapper logs the password at startup.
+  # Clients that verify the server (-Dghidra.cacerts) need the issuing CA and intermediates
+  # in their cacerts, since the server only presents its own certificate.
+  format: pem
   keystoreKey: keystore.p12
-  # Secret holding the password of the keystore and its private key.
-  # Required for format pkcs12 unless certManager.enabled. Generated when name is empty otherwise.
+  # Secret holding the keystore password, for format pkcs12.
   passwordSecret:
     name: ""
     key: password
@@ -76,7 +80,7 @@ tls:
   # at startup. Requires Stakater Reloader (https://github.com/stakater/Reloader).
   restartOnRenewal: false
 
-  # Issue the certificate with cert-manager (https://cert-manager.io), as a PKCS12 keystore.
+  # Issue the certificate with cert-manager (https://cert-manager.io).
   certManager:
     enabled: false
     issuerRef:
@@ -92,8 +96,6 @@ tls:
       algorithm: RSA
       size: 2048
       rotationPolicy: Always
-    # Modern2023 requires cert-manager 1.14 or newer.
-    pkcs12Profile: Modern2023
 
 # ghidra-panel (https://github.com/tankbusta/ghidra-panel) integration.
 # Installs the panel's JAAS jar, authenticates Ghidra logins against the panel's

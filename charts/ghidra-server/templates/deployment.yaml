@@ -2,7 +2,7 @@
 {{- $plugins := include "ghidra-server.plugins" . | fromJsonArray }}
 {{- $users := .Values.server.users | default list }}
 {{- $useEntrypoint := and (not .Values.panel.enabled) $users }}
-{{- $pemTLS := and .Values.tls.enabled (eq .Values.tls.format "pem") }}
+{{- $pemTLS := eq (include "ghidra-server.convertCertificate" .) "true" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -51,30 +51,21 @@ spec:
       initContainers:
       {{- end }}
       {{- if $pemTLS }}
-        # Converts the PEM certificate and key to a PKCS12 keystore, which Ghidra requires.
+        # Converts the PEM certificate and key to the PKCS12 keystore Ghidra requires.
+        # Only the server certificate is kept: Ghidra checks the last certificate of the
+        # chain for the digital signature key usage, which CA certificates lack.
+        # The keystore has no password, since the service wrapper would log it; it only
+        # lives in this pod's memory-backed volume, next to the key it was built from.
         - name: convert-certificate
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
-            - openssl
-            - pkcs12
-            - -export
-            - -name
-            - ghidra
-            - -in
-            - /tls/tls.crt
-            - -inkey
-            - /tls/tls.key
-            - -out
-            - /keystore/keystore.p12
-            - -passout
-            - env:GHIDRA_KEYSTORE_PASSWORD
-          env:
-            - name: GHIDRA_KEYSTORE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "ghidra-server.tlsPasswordSecretName" . }}
-                  key: {{ .Values.tls.passwordSecret.key }}
+            - /bin/sh
+            - -ec
+            - |
+              openssl x509 -in /tls/tls.crt -out /keystore/server.crt
+              openssl pkcs12 -export -name ghidra -in /keystore/server.crt -inkey /tls/tls.key -out /keystore/keystore.p12 -passout pass:
+              rm /keystore/server.crt
           {{- with .Values.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
@@ -138,17 +129,18 @@ spec:
             - /ghidra/server/ghidraSvr
             - console
           {{- end }}
-          {{- if or $useEntrypoint .Values.tls.enabled .Values.env }}
+          {{- $keystorePassword := and .Values.tls.enabled (not $pemTLS) }}
+          {{- if or $useEntrypoint $keystorePassword .Values.env }}
           env:
             {{- if $useEntrypoint }}
             - name: GHIDRA_USERS
               value: {{ join " " $users | quote }}
             {{- end }}
-            {{- if .Values.tls.enabled }}
+            {{- if $keystorePassword }}
             - name: GHIDRA_KEYSTORE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "ghidra-server.tlsPasswordSecretName" . }}
+                  name: {{ .Values.tls.passwordSecret.name }}
                   key: {{ .Values.tls.passwordSecret.key }}
             {{- end }}
             {{- with .Values.env }}
