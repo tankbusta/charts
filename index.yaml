@@ -21,6 +21,24 @@ entries:
   ghidra-server:
   - apiVersion: v2
     appVersion: 12.1.4
+    created: "2026-09-26T20:22:00.740127828Z"
+    description: Ghidra shared project server, with optional ghidra-panel JAAS authentication
+    digest: 3584ac7d413a665308d44324a35daa592b93e42783d305419ab2178c3709f291
+    home: https://github.com/tankbusta/charts
+    keywords:
+    - ghidra
+    - reverse-engineering
+    name: ghidra-server
+    sources:
+    - https://github.com/blacktop/docker-ghidra
+    - https://github.com/NationalSecurityAgency/ghidra
+    - https://github.com/tankbusta/ghidra-panel
+    type: application
+    urls:
+    - https://github.com/tankbusta/charts/releases/download/ghidra-server-0.1.1/ghidra-server-0.1.1.tgz
+    version: 0.1.1
+  - apiVersion: v2
+    appVersion: 12.1.4
     created: "2026-09-26T20:08:03.445145555Z"
     description: Ghidra shared project server, with optional ghidra-panel JAAS authentication
     digest: b055bf11cad5d449a314586f8d4043f23ca599eec52f20f9939866cc8faa931a
@@ -37,4 +55,4 @@ entries:
     urls:
     - https://github.com/tankbusta/charts/releases/download/ghidra-server-0.1.0/ghidra-server-0.1.0.tgz
     version: 0.1.0
-generated: "2026-09-26T20:08:03.4451628Z"
+generated: "2026-09-26T20:22:00.740141422Z"
