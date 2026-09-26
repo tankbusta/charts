@@ -1,0 +1,11 @@
+server:
+  hostname: ghidra.example.com
+service:
+  type: LoadBalancer
+tls:
+  enabled: true
+  restartOnRenewal: true
+  certManager:
+    enabled: true
+    issuerRef:
+      name: letsencrypt

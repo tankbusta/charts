@@ -1,0 +1,22 @@
+apiVersion: v2
+name: ghidra-server
+description: Ghidra shared project server, with optional ghidra-panel JAAS authentication
+home: https://github.com/tankbusta/charts
+sources:
+  - https://github.com/blacktop/docker-ghidra
+  - https://github.com/NationalSecurityAgency/ghidra
+  - https://github.com/tankbusta/ghidra-panel
+keywords:
+  - ghidra
+  - reverse-engineering
+
+type: application
+
+# This is the chart version. This version number should be incremented each time you make changes
+# to the chart and its templates, including the app version.
+# Versions are expected to follow Semantic Versioning (https://semver.org/)
+version: 0.1.0
+
+# Ghidra version, used as the default blacktop/ghidra image tag.
+# Plugins such as the ghidra-panel JAAS jar are built for a specific Ghidra version.
+appVersion: "12.1.4"

@@ -1,0 +1,52 @@
+{{- if and .Values.tls.enabled .Values.tls.certManager.enabled }}
+{{- $fullname := include "ghidra-server.fullname" . }}
+{{- $hostname := include "ghidra-server.hostname" . }}
+{{- $cm := .Values.tls.certManager }}
+{{- $dnsNames := $cm.dnsNames }}
+{{- $ipAddresses := $cm.ipAddresses }}
+{{- if not (or $dnsNames $ipAddresses) }}
+{{- if regexMatch "^[0-9]+(\\.[0-9]+){3}$" $hostname }}
+{{- $ipAddresses = list $hostname }}
+{{- else }}
+{{- $dnsNames = list $hostname }}
+{{- end }}
+{{- end }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "ghidra-server.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "ghidra-server.tlsSecretName" . }}
+  secretTemplate:
+    labels:
+      {{- include "ghidra-server.labels" . | nindent 6 }}
+  issuerRef:
+    {{- toYaml $cm.issuerRef | nindent 4 }}
+  commonName: {{ $dnsNames | default $ipAddresses | first | quote }}
+  {{- with $dnsNames }}
+  dnsNames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $ipAddresses }}
+  ipAddresses:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  duration: {{ $cm.duration }}
+  renewBefore: {{ $cm.renewBefore }}
+  privateKey:
+    {{- toYaml $cm.privateKey | nindent 4 }}
+  # Ghidra rejects server certificates without the digital signature key usage.
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+  keystores:
+    pkcs12:
+      create: true
+      profile: {{ $cm.pkcs12Profile }}
+      passwordSecretRef:
+        name: {{ include "ghidra-server.tlsPasswordSecretName" . }}
+        key: {{ .Values.tls.passwordSecret.key }}
+{{- end }}

@@ -1,0 +1,40 @@
+Ghidra server {{ .Values.image.tag | default .Chart.AppVersion }} is starting. Clients connect to:
+
+  {{ include "ghidra-server.hostname" . }}:13100
+{{- if not .Values.server.hostname }}
+
+server.hostname is unset, so only clients inside the cluster can connect. For desktop
+clients, expose the Service (e.g. --set service.type=LoadBalancer) and set server.hostname
+to an address that reaches it. Clients also need ports 13101 and 13102.
+{{- end }}
+{{- if .Values.tlsRoute.enabled }}
+
+TLSRoutes attach to Gateway {{ .Values.tlsRoute.parentRef.name }} on listeners {{ .Values.tlsRoute.listeners.ghidra }}, {{ .Values.tlsRoute.listeners.ghidraRmi }} and {{ .Values.tlsRoute.listeners.ghidraStream }}.
+Check they were accepted with: kubectl get tlsroute -n {{ .Release.Namespace }}
+{{- end }}
+{{- if .Values.panel.enabled }}
+
+Logins are authenticated by ghidra-panel. Set the panel's config.ghidra.grpc_addr to:
+
+  {{ include "ghidra-server.fullname" . }}-grpc:{{ .Values.panel.grpcPort }}
+{{- else if .Values.server.users }}
+
+On first start these users are created with the password "changeme":
+  {{ join ", " .Values.server.users }}
+{{- if .Values.server.passwordExpirationDays }}
+The password expires after {{ .Values.server.passwordExpirationDays }} day(s). Change it from a Ghidra client.
+{{- end }}
+{{- end }}
+{{- if .Values.tls.enabled }}
+
+The server presents the certificate in Secret {{ include "ghidra-server.tlsSecretName" . }}.
+Ghidra clients only verify it when they trust its CA. Add this to the client's
+support/launch.properties:
+
+  VMARGS=-Dghidra.cacerts=/path/to/ca.pem
+{{- if not .Values.tls.restartOnRenewal }}
+
+Ghidra reads the keystore only at startup. Restart the server after each renewal,
+or set tls.restartOnRenewal=true if Stakater Reloader is installed.
+{{- end }}
+{{- end }}

@@ -1,0 +1,14 @@
+server:
+  hostname: ghidra.tankbusta.com
+tls:
+  enabled: true
+  format: pem
+  secretName: ghidra-tankbusta-com-tls
+plugins:
+  - name: extra-plugin
+    url: https://example.com/extra-plugin.jar
+tlsRoute:
+  enabled: true
+  parentRef:
+    name: traefik
+    namespace: traefik

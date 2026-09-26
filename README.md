@@ -13,6 +13,7 @@ helm search repo tankbusta
 | Chart | Description |
 |-------|-------------|
 | [ghidra-authpanel](charts/ghidra-authpanel) | Self-service account and repository access panel for Ghidra servers |
+| [ghidra-server](charts/ghidra-server) | Ghidra shared project server, with optional ghidra-panel JAAS authentication |
 
 ## Releasing
 

@@ -1,0 +1,37 @@
+{{- if .Values.tlsRoute.enabled }}
+{{- $fullname := include "ghidra-server.fullname" . }}
+{{- $hostnames := .Values.tlsRoute.hostnames | default (list .Values.server.hostname) }}
+{{- $routes := list
+  (dict "suffix" "ghidra" "listener" .Values.tlsRoute.listeners.ghidra "port" 13100)
+  (dict "suffix" "ghidra-rmi" "listener" .Values.tlsRoute.listeners.ghidraRmi "port" 13101)
+  (dict "suffix" "ghidra-stream" "listener" .Values.tlsRoute.listeners.ghidraStream "port" 13102) }}
+{{- range $routes }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: TLSRoute
+metadata:
+  name: {{ $fullname }}-{{ .suffix }}
+  labels:
+    {{- include "ghidra-server.labels" $ | nindent 4 }}
+    {{- with $.Values.tlsRoute.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with $.Values.tlsRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    - name: {{ $.Values.tlsRoute.parentRef.name }}
+      {{- with $.Values.tlsRoute.parentRef.namespace }}
+      namespace: {{ . }}
+      {{- end }}
+      sectionName: {{ .listener }}
+  hostnames:
+    {{- toYaml $hostnames | nindent 4 }}
+  rules:
+    - backendRefs:
+        - name: {{ $fullname }}
+          port: {{ .port }}
+{{- end }}
+{{- end }}

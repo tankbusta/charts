@@ -1,0 +1,10 @@
+panel:
+  enabled: true
+  jdbc: jdbc:postgresql://postgres/ghidra_panel?user=ghidra_jaas&password=ci
+  networkPolicy:
+    enabled: true
+    podSelector:
+      app.kubernetes.io/name: ghidra-authpanel
+plugins:
+  - name: extra-plugin
+    url: https://example.com/extra-plugin.jar

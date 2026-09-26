@@ -1,0 +1,72 @@
+{{- $params := list }}
+{{- if .Values.panel.enabled }}
+{{- $params = concat $params (list "-a4" "-jaas" "/ghidra/server/jaas.conf") }}
+{{- if .Values.panel.autoProvision }}
+{{- $params = append $params "-autoProvision" }}
+{{- end }}
+{{- $params = concat $params (list "-grpc-port" (toString .Values.panel.grpcPort)) }}
+{{- else }}
+{{- $params = concat $params (list "-a0" (printf "-e%d" (int .Values.server.passwordExpirationDays))) }}
+{{- end }}
+{{- if .Values.server.allowUserToSpecifyName }}
+{{- $params = append $params "-u" }}
+{{- end }}
+{{- if .Values.server.anonymous }}
+{{- $params = append $params "-anonymous" }}
+{{- end }}
+{{- $params = concat $params (list "-ip" (include "ghidra-server.hostname" .)) .Values.server.extraArgs (list "${ghidra.repositories.dir}") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ghidra-server.fullname" . }}
+  labels:
+    {{- include "ghidra-server.labels" . | nindent 4 }}
+data:
+  server.conf: |
+    # Rendered by the ghidra-server chart, based on the server.conf shipped with blacktop/ghidra.
+    wrapper.working.dir=${ghidra_home}
+    wrapper.java.command=${java}
+    wrapper.java.umask=027
+
+    include=${classpath_frag}
+    {{- range $i, $p := include "ghidra-server.plugins" . | fromJsonArray }}
+    wrapper.java.classpath.plugin{{ $i }}=/ghidra/server/plugins/{{ $p.name }}.jar
+    {{- end }}
+
+    wrapper.java.additional.1=-Djava.net.preferIPv4Stack=true
+    wrapper.java.additional.2=-DApplicationRollingFileAppender.maxBackupIndex=10
+    wrapper.java.additional.3=-Dclasspath_frag=${classpath_frag}
+    wrapper.java.additional.4=-Dghidra.tls.server.protocols=TLSv1.2;TLSv1.3
+    wrapper.java.additional.5=-Ddb.buffers.DataBuffer.compressedOutput=true
+    {{- if .Values.tls.enabled }}
+    wrapper.java.additional.6=-Dghidra.keystore=/ghidra/server/tls/{{ include "ghidra-server.keystoreFile" . }}
+    # Expanded by the service wrapper from the container environment.
+    wrapper.java.additional.7=-Dghidra.password=${GHIDRA_KEYSTORE_PASSWORD}
+    {{- end }}
+    {{- range $i, $opt := .Values.server.extraJavaOptions }}
+    wrapper.java.additional.{{ add $i 20 }}={{ $opt }}
+    {{- end }}
+
+    wrapper.java.monitor.deadlock=true
+    {{- if .Values.panel.enabled }}
+    wrapper.java.app.mainclass=re.mkw.srejaas.PanelServer
+    {{- else }}
+    wrapper.java.app.mainclass=ghidra.server.remote.GhidraServer
+    {{- end }}
+
+    wrapper.java.initmemory={{ int .Values.server.initMemory }}
+    wrapper.java.maxmemory={{ int .Values.server.maxMemory }}
+
+    ghidra.repositories.dir=/repos
+    {{- range $i, $p := $params }}
+    wrapper.app.parameter.{{ add $i 1 }}={{ $p }}
+    {{- end }}
+
+    wrapper.console.format=PM
+    wrapper.console.loglevel=INFO
+    wrapper.logfile=wrapper.log
+    wrapper.logfile.format=LPTM
+    wrapper.logfile.loglevel=INFO
+    wrapper.logfile.maxsize=10m
+    wrapper.logfile.maxfiles=10
+    wrapper.console.title=Ghidra Server

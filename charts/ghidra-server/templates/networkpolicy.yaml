@@ -1,0 +1,36 @@
+{{- if and .Values.panel.enabled .Values.panel.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ghidra-server.fullname" . }}
+  labels:
+    {{- include "ghidra-server.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ghidra-server.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Ghidra clients, from anywhere
+    - ports:
+        - port: 13100
+        - port: 13101
+        - port: 13102
+    # Panel gRPC API, only from the selected pods
+    - from:
+        - podSelector:
+            {{- with .Values.panel.networkPolicy.podSelector }}
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+            {{- else }}
+            {}
+            {{- end }}
+          {{- with .Values.panel.networkPolicy.namespaceSelector }}
+          namespaceSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+      ports:
+        - port: {{ .Values.panel.grpcPort }}
+{{- end }}

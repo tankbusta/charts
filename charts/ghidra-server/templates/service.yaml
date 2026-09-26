@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ghidra-server.fullname" . }}
+  labels:
+    {{- include "ghidra-server.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  {{- with .Values.service.loadBalancerIP }}
+  loadBalancerIP: {{ . }}
+  {{- end }}
+  {{- with .Values.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ . }}
+  {{- end }}
+  ports:
+    - port: 13100
+      targetPort: ghidra
+      protocol: TCP
+      name: ghidra
+    - port: 13101
+      targetPort: ghidra-rmi
+      protocol: TCP
+      name: ghidra-rmi
+    - port: 13102
+      targetPort: ghidra-stream
+      protocol: TCP
+      name: ghidra-stream
+  selector:
+    {{- include "ghidra-server.selectorLabels" . | nindent 4 }}
+{{- if .Values.panel.enabled }}
+---
+# The panel's gRPC API is unauthenticated, so it is kept off the client-facing Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ghidra-server.fullname" . }}-grpc
+  labels:
+    {{- include "ghidra-server.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.panel.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    {{- include "ghidra-server.selectorLabels" . | nindent 4 }}
+{{- end }}

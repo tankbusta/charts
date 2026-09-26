@@ -1,0 +1,269 @@
+{{- include "ghidra-server.validate" . }}
+{{- $plugins := include "ghidra-server.plugins" . | fromJsonArray }}
+{{- $users := .Values.server.users | default list }}
+{{- $useEntrypoint := and (not .Values.panel.enabled) $users }}
+{{- $pemTLS := and .Values.tls.enabled (eq .Values.tls.format "pem") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ghidra-server.fullname" . }}
+  labels:
+    {{- include "ghidra-server.labels" . | nindent 4 }}
+  {{- if and .Values.tls.enabled .Values.tls.restartOnRenewal }}
+  annotations:
+    secret.reloader.stakater.com/reload: {{ include "ghidra-server.tlsSecretName" . }}
+  {{- end }}
+spec:
+  # Ghidra server can't share a repositories directory with another instance.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "ghidra-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if and .Values.panel.enabled (not .Values.panel.existingSecret) }}
+        checksum/jaas: {{ include (print $.Template.BasePath "/jaas-secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "ghidra-server.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "ghidra-server.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or $plugins $pemTLS }}
+      initContainers:
+      {{- end }}
+      {{- if $pemTLS }}
+        # Converts the PEM certificate and key to a PKCS12 keystore, which Ghidra requires.
+        - name: convert-certificate
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - openssl
+            - pkcs12
+            - -export
+            - -name
+            - ghidra
+            - -in
+            - /tls/tls.crt
+            - -inkey
+            - /tls/tls.key
+            - -out
+            - /keystore/keystore.p12
+            - -passout
+            - env:GHIDRA_KEYSTORE_PASSWORD
+          env:
+            - name: GHIDRA_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ghidra-server.tlsPasswordSecretName" . }}
+                  key: {{ .Values.tls.passwordSecret.key }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+            - name: keystore
+              mountPath: /keystore
+      {{- end }}
+      {{- if $plugins }}
+        # Downloads plugin jars before the server starts. They are loaded from the server classpath.
+        - name: install-plugins
+          image: "{{ .Values.pluginInstaller.image.repository }}:{{ .Values.pluginInstaller.image.tag }}"
+          imagePullPolicy: {{ .Values.pluginInstaller.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              {{- range $plugins }}
+              echo "Downloading {{ .name }}"
+              curl -fsSL --retry 3 -o /plugins/{{ .name }}.jar.tmp {{ .url | squote }}
+              {{- if .sha256 }}
+              echo "{{ .sha256 }}  /plugins/{{ .name }}.jar.tmp" | sha256sum -c -
+              {{- end }}
+              mv /plugins/{{ .name }}.jar.tmp /plugins/{{ .name }}.jar
+              {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 100
+            runAsGroup: 101
+            capabilities:
+              drop:
+                - ALL
+          {{- with .Values.pluginInstaller.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: plugins
+              mountPath: /plugins
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if $useEntrypoint }}
+          # The image's entrypoint queues GHIDRA_USERS for creation on first start.
+          args:
+            - server
+          {{- else }}
+          # The entrypoint would add an "admin" user when GHIDRA_USERS is empty, so start the server directly.
+          command:
+            - /ghidra/server/ghidraSvr
+            - console
+          {{- end }}
+          {{- if or $useEntrypoint .Values.tls.enabled .Values.env }}
+          env:
+            {{- if $useEntrypoint }}
+            - name: GHIDRA_USERS
+              value: {{ join " " $users | quote }}
+            {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: GHIDRA_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ghidra-server.tlsPasswordSecretName" . }}
+                  key: {{ .Values.tls.passwordSecret.key }}
+            {{- end }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          ports:
+            - name: ghidra
+              containerPort: 13100
+              protocol: TCP
+            - name: ghidra-rmi
+              containerPort: 13101
+              protocol: TCP
+            - name: ghidra-stream
+              containerPort: 13102
+              protocol: TCP
+            {{- if .Values.panel.enabled }}
+            - name: grpc
+              containerPort: {{ .Values.panel.grpcPort }}
+              protocol: TCP
+            {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: repos
+              mountPath: /repos
+            - name: config
+              mountPath: /ghidra/server/server.conf
+              subPath: server.conf
+              readOnly: true
+            {{- if .Values.panel.enabled }}
+            - name: jaas
+              mountPath: /ghidra/server/jaas.conf
+              subPath: jaas.conf
+              readOnly: true
+            {{- end }}
+            {{- if $plugins }}
+            - name: plugins
+              mountPath: /ghidra/server/plugins
+              readOnly: true
+            {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: {{ ternary "keystore" "tls" $pemTLS }}
+              mountPath: /ghidra/server/tls
+              readOnly: true
+            {{- end }}
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: repos
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (include "ghidra-server.fullname" .) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: config
+          configMap:
+            name: {{ include "ghidra-server.fullname" . }}
+        {{- if .Values.panel.enabled }}
+        - name: jaas
+          secret:
+            secretName: {{ include "ghidra-server.jaasSecretName" . }}
+        {{- end }}
+        {{- if $plugins }}
+        - name: plugins
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.tls.enabled }}
+        - name: tls
+          secret:
+            secretName: {{ include "ghidra-server.tlsSecretName" . }}
+            items:
+              {{- if $pemTLS }}
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+              {{- else }}
+              - key: {{ .Values.tls.keystoreKey }}
+                path: {{ .Values.tls.keystoreKey }}
+              {{- end }}
+        {{- if $pemTLS }}
+        - name: keystore
+          emptyDir:
+            medium: Memory
+        {{- end }}
+        {{- end }}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "ghidra-server.fullname" . }}-test-connection"
+  labels:
+    {{- include "ghidra-server.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: nc
+      image: busybox
+      command: ['nc', '-z', '-w', '5', '{{ include "ghidra-server.fullname" . }}', '13100']
+  restartPolicy: Never

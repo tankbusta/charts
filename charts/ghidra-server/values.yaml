@@ -1,0 +1,258 @@
+# Default values for ghidra-server.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+image:
+  repository: blacktop/ghidra
+  # This sets the pull policy for images.
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  # Plugin jars must be built for the same Ghidra version.
+  tag: ""
+
+# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: []
+# This is to override the chart name.
+nameOverride: ""
+fullnameOverride: ""
+
+# Used to build the default server.hostname.
+clusterDomain: cluster.local
+
+server:
+  # Hostname or IP address clients use to reach the server (Ghidra's -ip option).
+  # Clients first connect to port 13100, then Ghidra tells them to connect to this
+  # hostname on 13101 and 13102, so it must resolve and route from wherever clients run.
+  # Defaults to the in-cluster Service name, which only works for clients inside the cluster.
+  # For desktop clients, expose the Service (e.g. type LoadBalancer) and set its DNS name here.
+  hostname: ""
+
+  # JVM heap, in MB.
+  initMemory: 396
+  maxMemory: 768
+
+  # Allow users to log in with a name other than their local OS username (-u).
+  allowUserToSpecifyName: true
+  # Allow anonymous read-only access to repositories marked for it (-anonymous).
+  anonymous: false
+
+  # Users added on first start when using Ghidra's built-in password authentication
+  # (panel.enabled=false). They get the password "changeme", which expires after
+  # passwordExpirationDays. Change it from a Ghidra client (Project > Change Password).
+  # Ignored once the users file exists on the repositories volume.
+  users:
+    - admin
+  # Days until the initial "changeme" password expires (-e). 0 never expires.
+  passwordExpirationDays: 1
+
+  # Additional server arguments, placed before the repositories directory.
+  extraArgs: []
+  # Additional JVM options.
+  extraJavaOptions: []
+  # - -Dghidra.server.log.level=DEBUG
+
+# Server certificate. Ghidra always encrypts client connections, but without a keystore it
+# generates a new self-signed certificate on every start. Clients only verify the certificate
+# when they set -Dghidra.cacerts=<CA certificate PEM> (VMARGS in the client's support/launch.properties).
+tls:
+  enabled: false
+  # Secret holding the keystore. Required unless certManager.enabled, which defaults it to <fullname>-tls.
+  secretName: ""
+  # Format of the Secret:
+  #   pkcs12: a PKCS12 or JKS keystore under keystoreKey. The first entry must be the server
+  #           certificate and its private key, with the digital signature key usage.
+  #   pem:    a kubernetes.io/tls Secret with tls.crt and tls.key, such as one cert-manager
+  #           issued for an Ingress. Converted to PKCS12 by an init container at startup.
+  #           The Secret must be in the release namespace.
+  format: pkcs12
+  keystoreKey: keystore.p12
+  # Secret holding the password of the keystore and its private key.
+  # Required for format pkcs12 unless certManager.enabled. Generated when name is empty otherwise.
+  passwordSecret:
+    name: ""
+    key: password
+  # Restart the server when the certificate is renewed, since Ghidra only reads the keystore
+  # at startup. Requires Stakater Reloader (https://github.com/stakater/Reloader).
+  restartOnRenewal: false
+
+  # Issue the certificate with cert-manager (https://cert-manager.io), as a PKCS12 keystore.
+  certManager:
+    enabled: false
+    issuerRef:
+      name: ""
+      kind: ClusterIssuer
+      group: cert-manager.io
+    # Defaults to server.hostname. Public issuers such as Let's Encrypt require a public DNS name.
+    dnsNames: []
+    ipAddresses: []
+    duration: 2160h
+    renewBefore: 360h
+    privateKey:
+      algorithm: RSA
+      size: 2048
+      rotationPolicy: Always
+    # Modern2023 requires cert-manager 1.14 or newer.
+    pkcs12Profile: Modern2023
+
+# ghidra-panel (https://github.com/tankbusta/ghidra-panel) integration.
+# Installs the panel's JAAS jar, authenticates Ghidra logins against the panel's
+# database, and starts the gRPC API the panel uses to manage users and repositories.
+panel:
+  enabled: false
+  jar:
+    # Must match the Ghidra version of the image.
+    url: https://github.com/tankbusta/ghidra-panel/releases/download/v1.0.0/ghidra-panel-jaas-ghidra_12.1.4.jar
+    sha256: 4576c7424447e52d2920c71760677b5b8a70d110db1113eb615da7dfafd275a8
+  # JDBC URL of the panel's database; the login module only needs SELECT on its passwords table.
+  #   PostgreSQL: jdbc:postgresql://postgres/ghidra_panel?user=ghidra_jaas&password=changeme&sslmode=require
+  #   SQLite:     jdbc:sqlite:/panel-data/ghidra_panel.db
+  # SQLite requires mounting the panel's volume into this pod (see volumes/volumeMounts),
+  # so the panel and server must share a node or a ReadWriteMany volume. PostgreSQL is recommended.
+  # Rendered into a Secret, since the URL may contain a password.
+  jdbc: ""
+  # Use an existing Secret instead of jdbc. It must contain the key "jaas.conf", e.g.
+  #   auth {
+  #       re.mkw.srejaas.PanelLoginModule REQUIRED
+  #           JDBC="jdbc:postgresql://...";
+  #   };
+  existingSecret: ""
+  # Create Ghidra accounts on first successful login (-autoProvision).
+  autoProvision: true
+  # Port of the panel's gRPC API. The API is unauthenticated and can add users and delete
+  # repositories, so it is only exposed through a separate ClusterIP Service.
+  # Point the panel's config.ghidra.grpc_addr at <fullname>-grpc:<grpcPort>.
+  grpcPort: 13103
+  # Restrict the gRPC port to pods matching these labels, e.g. the panel's pods:
+  #   app.kubernetes.io/name: ghidra-authpanel
+  # Creates a NetworkPolicy, which only has an effect if your CNI enforces them.
+  networkPolicy:
+    enabled: false
+    podSelector: {}
+    namespaceSelector: {}
+
+# Extra plugin jars, downloaded by an init container before the server starts and added to
+# the server's classpath. sha256 is optional but recommended.
+plugins: []
+# - name: my-plugin
+#   url: https://example.com/my-plugin.jar
+#   sha256: 0123...
+
+# Init container that downloads plugin jars.
+pluginInstaller:
+  image:
+    repository: curlimages/curl
+    tag: "8.22.0"
+    pullPolicy: IfNotPresent
+  resources: {}
+
+# Volume mounted at /repos, holding repositories and the users file.
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  annotations: {}
+
+# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: false
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# This is for setting Kubernetes Annotations to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+podAnnotations: {}
+# This is for setting Kubernetes Labels to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+podLabels: {}
+
+# The image runs as root and writes to /repos and /ghidra/server.
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+
+# Service for Ghidra clients. Ghidra uses three consecutive ports, and clients connect to
+# 13101 and 13102 on server.hostname directly, so the ports can't be remapped (no NodePort).
+service:
+  # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+  type: ClusterIP
+  annotations: {}
+  loadBalancerIP: ""
+  loadBalancerSourceRanges: []
+  externalTrafficPolicy: ""
+
+# Gateway API TLSRoutes that pass Ghidra connections through a Gateway without terminating TLS.
+# Every Ghidra port speaks TLS and Java clients send the hostname (SNI), so the Gateway can
+# route by server.hostname. One route is created per port, since each attaches to its own listener.
+# The Gateway needs a TLS listener in Passthrough mode on 13100, 13101 and 13102 that allows
+# TLSRoutes from this namespace. Requires TLSRoute v1 (Gateway API 1.5+ standard channel).
+tlsRoute:
+  enabled: false
+  parentRef:
+    name: ""
+    namespace: ""
+  # Listener (sectionName) on the Gateway for each Ghidra port.
+  listeners:
+    ghidra: ghidra
+    ghidraRmi: ghidra-rmi
+    ghidraStream: ghidra-stream
+  # Defaults to server.hostname.
+  hostnames: []
+  annotations: {}
+  labels: {}
+
+resources: {}
+  # Keep the memory limit comfortably above server.maxMemory.
+  # limits:
+  #   memory: 1536Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 1Gi
+
+# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+startupProbe:
+  tcpSocket:
+    port: ghidra
+  periodSeconds: 5
+  failureThreshold: 60
+livenessProbe:
+  tcpSocket:
+    port: ghidra
+  periodSeconds: 20
+readinessProbe:
+  tcpSocket:
+    port: ghidra
+  periodSeconds: 10
+
+# Additional environment variables on the server container.
+env: []
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+# - name: panel-data
+#   persistentVolumeClaim:
+#     claimName: ghidra-authpanel
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: []
+# - name: panel-data
+#   mountPath: /panel-data
+#   readOnly: true
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
