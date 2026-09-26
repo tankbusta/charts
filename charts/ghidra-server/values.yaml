@@ -157,6 +157,10 @@ persistence:
     - ReadWriteOnce
   size: 10Gi
   annotations: {}
+  # Directory of the volume mounted at /repos. Ghidra treats every directory in /repos
+  # as a repository, including the lost+found of a freshly formatted volume.
+  # Set to "" to mount the volume root.
+  subPath: repositories
 
 # This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
 serviceAccount:

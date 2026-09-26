@@ -181,6 +181,9 @@ spec:
           volumeMounts:
             - name: repos
               mountPath: /repos
+              {{- with .Values.persistence.subPath }}
+              subPath: {{ . }}
+              {{- end }}
             - name: config
               mountPath: /ghidra/server/server.conf
               subPath: server.conf
