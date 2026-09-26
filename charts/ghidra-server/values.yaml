@@ -104,8 +104,8 @@ panel:
   enabled: false
   jar:
     # Must match the Ghidra version of the image.
-    url: https://github.com/tankbusta/ghidra-panel/releases/download/v1.0.0/ghidra-panel-jaas-ghidra_12.1.4.jar
-    sha256: 4576c7424447e52d2920c71760677b5b8a70d110db1113eb615da7dfafd275a8
+    url: https://github.com/tankbusta/ghidra-panel/releases/download/v1.0.1/ghidra-panel-jaas-ghidra_12.1.4.jar
+    sha256: b2ba6d344e300f420221a9e752629da76aee7cbf80710e2cb3468c6ee40fa133
   # JDBC URL of the panel's database; the login module only needs SELECT on its passwords table.
   #   PostgreSQL: jdbc:postgresql://postgres/ghidra_panel?user=ghidra_jaas&password=changeme&sslmode=require
   #   SQLite:     jdbc:sqlite:/panel-data/ghidra_panel.db
